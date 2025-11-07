@@ -188,7 +188,7 @@ def http_check(url: str, timeout: float, method: str, allow_status: List[int], f
 
     req = urllib.request.Request(url=url, method=method.upper(), headers=headers)
     try:
-        with opener.open(req, timeout=timeout) as resp:  # type: HTTPResponse
+        with opener.open(req, timeout=timeout) as resp:  # typeHTTPResponse
             status = int(resp.status)
             loc = resp.headers.get("Location")
             body_preview = resp.read(2048)
