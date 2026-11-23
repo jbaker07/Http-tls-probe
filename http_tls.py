@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-HTTP/TLS Probe — Minimal, dependency-free diagnostics
+HTTP/TLS Probe: minimal, dependency-free diagnostics
 
 Checks performed (in order):
  1) DNS resolution for host from URL
@@ -18,12 +18,12 @@ Exit codes
   5 = JSON expectation failure
 
 Usage examples
-  probe.py --url https://example.com/health --expect-json '{"ok": true}'
-  probe.py --url https://expired.badssl.com --insecure
-  probe.py --url https://api.example.com/v1/ping --method GET --headers 'Authorization:Bearer X;X-Env:prod' --no-follow
-  probe.py --url https://internal.service.local --ca-file /path/to/org-root.pem
+  http_tls.py --url https://example.com/health --expect-json '{"ok": true}'
+  http_tls.py --url https://expired.badssl.com --insecure
+  http_tls.py --url https://api.example.com/v1/ping --method GET --headers 'Authorization:Bearer X;X-Env:prod' --no-follow
+  http_tls.py --url https://internal.service.local --ca-file /path/to/org-root.pem
 
-Author: Jermaine Baker (resume project)
+Author: Jermaine Baker
 """
 
 import argparse
@@ -97,7 +97,7 @@ def build_ssl_context(insecure: bool, ca_file: Optional[str]) -> ssl.SSLContext:
         ctx.verify_mode = ssl.CERT_NONE
         return ctx
     if ca_file:
-        # Use a context that trusts only the provided CA file in addition to system roots
+        # Trust only the provided CA file. System roots are not loaded in this case.
         ctx = ssl.create_default_context(cafile=ca_file)
         return ctx
     return ssl.create_default_context()
@@ -146,7 +146,9 @@ def tls_check(host: str, port: int, timeout: float, insecure: bool, ca_file: Opt
             with ctx.wrap_socket(sock, server_hostname=None if insecure else host) as ssock:
                 cert = ssock.getpeercert()
                 # Extract issuer, subjectAltName, notAfter
-                issuer = ", ".join("{}={}".format(k, v) for k, v in cert.get("issuer", [("", "")])[0])
+                # issuer is a tuple of RDNs, each a tuple of (key, value) pairs.
+                # It is empty when verification is off (--insecure).
+                issuer = ", ".join("{}={}".format(k, v) for rdn in cert.get("issuer", ()) for k, v in rdn)
                 san_list = [d[1] for d in cert.get("subjectAltName", []) if d[0].lower() == "dns"]
                 not_after = cert.get("notAfter")
                 days_left = None
