@@ -143,7 +143,10 @@ def tls_check(host: str, port: int, timeout: float, insecure: bool, ca_file: Opt
     ctx = build_ssl_context(insecure, ca_file)
     try:
         with socket.create_connection((host, port), timeout=timeout) as sock:
-            with ctx.wrap_socket(sock, server_hostname=None if insecure else host) as ssock:
+            # Send the host name (SNI) even with --insecure. Servers behind a shared IP,
+            # such as a CDN or a reverse proxy, pick the certificate from it, and without
+            # it many of them reset the handshake.
+            with ctx.wrap_socket(sock, server_hostname=host) as ssock:
                 cert = ssock.getpeercert()
                 # Extract issuer, subjectAltName, notAfter
                 # issuer is a tuple of RDNs, each a tuple of (key, value) pairs.
@@ -159,8 +162,13 @@ def tls_check(host: str, port: int, timeout: float, insecure: bool, ca_file: Opt
                         days_left = int((expires - time.time()) / 86400)
                     except Exception:
                         pass
+                if insecure:
+                    # with verification off, Python does not parse the peer certificate, so there is nothing to show
+                    msg = f"TLS OK, {ssock.version()}, certificate not verified (--insecure)"
+                    return True, msg, {"tls_version": ssock.version(), "verified": False}
                 msg = f"TLS OK; issuer: {issuer or 'unknown'}; SANs: {', '.join(san_list[:5]) or 'none'}; expires in {days_left} days"
-                return True, msg, {"issuer": issuer, "sans": san_list, "days_left": days_left}
+                return True, msg, {"issuer": issuer, "sans": san_list, "days_left": days_left,
+                                   "tls_version": ssock.version(), "verified": True}
     except ssl.SSLError as e:
         return False, f"TLS handshake failed: {e}", {}
     except Exception as e:
